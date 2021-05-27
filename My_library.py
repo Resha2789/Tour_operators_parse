@@ -4,7 +4,7 @@ from selenium import webdriver
 from webdriver_manager.chrome import ChromeDriverManager
 from datetime import datetime
 import time
-import win32com.client
+import win32com.client as win32
 import os
 import keyboard
 
@@ -66,7 +66,7 @@ class LoadExcel:
         # noinspection PyBroadException
         try:
             # COM объект
-            self.Excel = win32com.client.Dispatch("Excel.Application")
+            self.Excel = win32.Dispatch("Excel.Application")
 
             if self.Excel.Application.Workbooks.Count > 0:
                 self.set_properties_excel()
@@ -125,60 +125,205 @@ class LoadExcel:
 class ReadExcel(LoadExcel, OutPut, IntPut):
     def __init__(self):
         super().__init__()
+        self.row = 2  # Номер строки с которой начнется запись
 
     def read_excel(self):
         # noinspection PyBroadException
+        # try:
+        # Массив данных с Data.xlsx лист "Входные параметры"
+        array = self.sheet_inp.Range(self.sheet_inp.Cells(2, 1), self.sheet_inp.Cells(12, 11)).Value
+
+        for i in array:
+            # Отправная точка
+            if i[0] is not None:
+                self.inp_city = i[0]
+            # Тур операторы
+            if i[2] is not None:
+                self.inp_tur_operator.append(i[2])
+        # Интервал дат вылета
+        if array[0][4] is not None and array[0][6] is not None:
+            self.inp_date['start'] = array[0][4].strftime('%d/%m/%Y')
+            self.inp_date['end'] = array[0][6].strftime('%d/%m/%Y')
+        # Ночей от - до
+        if array[1][8] is not None and array[1][10] is not None:
+            self.inp_night['start'] = int(array[1][8])
+            self.inp_night['end'] = int(array[1][10])
+        # Опция режима записи в Data.xlsx
+        if array[3][6] is not None:
+            self.inp_rewriting = True if array[3][6] == 'Перезапись' else False
+        # Опция отображения браузера
+        if array[4][6] is not None:
+            self.inp_show_browser = True if array[4][6] == 'Показать' else False
+
+        # Если метод записи "Продолжать" то считываем названии услуг с Data.xlsx
+        if not self.inp_rewriting:
+            # Номер строки с которой начнется запись
+            self.row = self.sheet_out.Cells(1, 1).CurrentRegion.Rows.Count + 1
+            # Массив данных с Data.xlsx лист "Результат парсинга"
+            array_2 = self.sheet_out.Range(self.sheet_out.Cells(1, 1), self.sheet_out.Cells(1, 60)).Value
+            for i in range(12, len(array_2[0])):
+                if array_2[0][i] is not None:
+                    self.inp_services.append(array_2[0][i])
+                else:
+                    # print(f"\nУслуги отеля: {self.inp_services}")
+                    break
+        else:
+            self.sheet_out.Select()
+            self.sheet_out.Range(self.Excel.Application.Selection, self.Excel.Application.Selection.End(-4121)).Select()
+            self.sheet_out.Range(self.Excel.Application.Selection, self.Excel.Application.Selection.End(-4161)).Select()
+            self.Excel.Application.Selection.EntireRow.Delete()
+            self.sheet_out.Range('A2').Select()
+
+        print(f"\nОтправная точка: {self.inp_city}"
+              f"\nТуроператоры: {self.inp_tur_operator}"
+              f"\nИнтервал дат вылета: {self.inp_date}"
+              f"\nНочей от-до: {self.inp_night}"
+              f"\nМетод записи в Data.xlsx: {array[3][6]}"
+              f"\nОтображение браузера: {array[4][6]}\n")
+        return True
+        # except:
+        #     print(f"except read_excel")
+        #     return False
+
+
+# Запись в Excel результата парсинга
+class WriteExcel(ReadExcel):
+    def __init__(self):
+        super().__init__()
+        self.count_hotel = 0
+        self.count_tur = 0
+        self.title_services = []
+        self.value_services = []
+        self.title_changed = False
+
+    def write_excel(self):
+        """
+        НОМЕРА СТОЛБЦОВ В Data.xlsx
+        hotel_name = 1
+        city = 2
+        tour_operator = 3
+        beach_line = 4
+        distance_to_airport = 5
+        food = 6
+        hotel_rating = 7
+        count_stars = 8
+        date_start = 9
+        date_end = 10
+        night = 11
+        price = 12
+        services = 13
+        """
+        # Фармируем одномерный массив для записи в Data.xlsx
+        data = [self.out_hotel_name[-1],
+                self.out_city[-1],
+                self.out_tour_operator[-1][-1],
+                self.out_beach_line[-1],
+                self.out_distance_to_airport[-1],
+                self.out_food[-1][-1],
+                self.out_hotel_rating[-1],
+                self.out_count_stars[-1],
+                self.out_date[-1][-1][0],
+                self.out_date[-1][-1][1],
+                self.out_night[-1][-1],
+                self.out_price[-1][-1]
+                ]
+
         try:
-            # Массив данных с Data.xlsx лист "Входные параметры"
-            array = self.sheet_inp.Range(self.sheet_inp.Cells(2, 1), self.sheet_inp.Cells(12, 11)).Value
 
-            for i in array:
-                # Отправная точка
-                if i[0] is not None:
-                    self.inp_city = i[0]
-                # Тур операторы
-                if i[2] is not None:
-                    self.inp_tur_operator.append(i[2])
-            # Интервал дат вылета
-            if array[0][4] is not None and array[0][6] is not None:
-                self.inp_date['start'] = array[0][4].strftime('%d/%m/%Y')
-                self.inp_date['end'] = array[0][6].strftime('%d/%m/%Y')
-            # Ночей от - до
-            if array[1][8] is not None and array[1][10] is not None:
-                self.inp_night['start'] = int(array[1][8])
-                self.inp_night['end'] = int(array[1][10])
-            # Опция режима записи в Data.xlsx
-            if array[3][6] is not None:
-                self.inp_rewriting = True if array[3][6] == 'Перезапись' else False
-            # Опция отображения браузера
-            if array[4][6] is not None:
-                self.inp_show_browser = True if array[4][6] == 'Показать' else False
+            """ //////////////// Записывам услуги отеля /////////////////////////////////////////////////"""
+            """
+            Так как количесто и виды услуг у отелей разные то с 13 столбца название услуг формируются по предлогаемым услугам отелей
+            т.е. например первый отель garden ее услуги - (wifi, СПА, Басейн)
+            после столбца 12-Цена будут названии услуг 13-wifi, 14-СПА, 15-Басейн
+            у следующего отеля услги - (wifi, СПА, Басейн, места для курении) т.е. на одну услугу больше это (места для курении)
+            значит появится еще один столбец 16-места для курении
+            теперь это выглядит так 12-Цена, 13-wifi, 14-СПА, 15-Басейн, 16-места для курении
+            и в дальнейшем если у отеля будет услуга которой нету в названий услуг то она добавится в конец таблицы
+            если у отеля будет услуга wifi то она добавится в 13-wifi если басейн то 15-Басейн и т.д.
 
-            # Если метод записи "Продолжать" то считываем названии услуг с Data.xlsx
-            if not self.inp_rewriting:
-                # Массив данных с Data.xlsx лист "Результат парсинга"
-                array_2 = self.sheet_out.Range(self.sheet_out.Cells(1, 1), self.sheet_out.Cells(1, 60)).Value
-                for i in range(12, len(array_2[0])):
-                    if array_2[0][i] is not None:
-                        self.inp_services.append(array_2[0][i])
-                    else:
-                        # print(f"\nУслуги отеля: {self.inp_services}")
-                        break
+            title_services - массив названий услуг в Data.xlsx
+            value_services - массив с описаниями услуг в Data.xlsx
+            out_services[-1][0] - массив названий услуг текущего отеля
+            out_services[-1][1] - массив с описаниями услуг текущего отеля
+            """
+            # Указываем что массив с названии услуг не изменен
+            self.title_changed = False
 
-            print(f"\nОтправная точка: {self.inp_city}"
-                  f"\nТуроператоры: {self.inp_tur_operator}"
-                  f"\nИнтервал дат вылета: {self.inp_date}"
-                  f"\nНочей от-до: {self.inp_night}"
-                  f"\nМетод записи в Data.xlsx: {array[3][6]}"
-                  f"\nОтображение браузера: {array[4][6]}\n")
-            return True
+            # Если данные по услугам отсутствуют, то value_services пустой массив и услуги не записываем
+            if not self.out_services[-1]:
+                self.value_services = []
+            # Если данные по услугам есть
+            else:
+                # Если Метод записи "Продолжить"
+                if not self.inp_rewriting and len(self.title_services) == 0:
+                    self.title_services = self.inp_services
+
+                # Если массив названий услуг пустой
+                if len(self.title_services) == 0:
+                    self.title_services = self.out_services[-1][0]  # Заполняем массив название услуг
+                    self.title_changed = True  # Указываем массив названии услуг изменен
+                    for i in self.out_services[-1][1]:
+                        data.append(i)  # Добовляем в одномерный массив data для записи в Data.xlsx
+                # Если массив названий услуг не пустой
+                else:
+                    # Создаем пустой массив для описаний услуг текущего отеля. Размерность такая же как (title_services -  массив названий услуг в Data.xlsx)
+                    self.value_services = ['' for i in range(len(self.title_services))]
+
+                    # Проходим по массиву названий услуг текущего отеля
+                    for i in self.out_services[-1][0]:  # i - Название услуги текущего отеля
+                        out_index = self.out_services[-1][0].index(i)  # Индекс элемента названий услуг текущего отеля
+                        # Если в массиве названий услуг в Data.xlsx ЕСТЬ названий услуг текущего отеля
+                        if i in self.title_services:
+                            index_1 = self.title_services.index(i)  # Индекс элемента названий услуг Data.xlsx
+                            self.value_services[index_1] = self.out_services[-1][1][out_index]  # Описаниями услуг текущего отеля
+                        # Если в массиве названий услуг в Data.xlsx НЕТУ названий услуг текущего отеля
+                        else:
+                            # (Добавляем в массив названий услуг Data.xlsx) название услуги текущего отеля
+                            self.title_services.append(i)
+                            # (Добавляем в массив с описаниями услуг Data.xlsx) описаниями услуг текущего отеля
+                            self.value_services.append(self.out_services[-1][0][out_index])
+                            # Указываем массив названии услуг изменен
+                            self.title_changed = True
+
+                    for i in self.value_services:
+                        data.append(i)  # Добовляем в одномерный массив data, услуги текущего отеля для записи в Data.xlsx
+
+                # Если массив названии услуг изменен
+                if self.title_changed:
+                    # Обновляем названии услуг Data.xlsx
+                    self.sheet_out.Range(self.sheet_out.Cells(1, 13), self.sheet_out.Cells(1, 12 + len(self.title_services))).value = self.title_services
+            """//////////////////Конец формирование услуг/////////////////////////////////////////////////////////////////////////////////////"""
+
+            # Записываем в Data.xlsx данные о туре
+            self.sheet_out.Range(self.sheet_out.Cells(self.row, 1), self.sheet_out.Cells(self.row, len(data))).value = data
+            self.row += 1  # Номер строки в Data.xlsx где производится запись увеличиваем на + 1
+
         except:
-            print(f"except read_excel")
-            return False
+            # Если в excel ячейка будет в режими редактирования то запись прервется и произайдет рекурсия, он будет пытаться записать сного и сного, пока
+            # не выйдети из режима редактирования ячейки
+            print(f"Не удалось записать данные в Excel: {self.file_name};\n"
+                  f"Причины:\n"
+                  f"1. Нужно выйти из режима редактрирования ячеек.\n"
+                  f"2. Файл {self.file_name} не найден.")
+            time.sleep(2)
+            return self.write_excel()  # Рекурсия
+
+    def printer(self):
+        for i in range(0, len(self.out_hotel_name)):
+            print(f"Отель {self.out_hotel_name[i]}")
+            print(f"Количество звезд {self.out_count_stars[i]}")
+            print(f"До аэропорта {self.out_distance_to_airport[i]}")
+            print(f"Пляжная линия {self.out_beach_line[i]}")
+            print(f"Сервисы {self.out_services[i]}")
+            for j in range(0, len(self.out_price[i])):
+                print(f"Цены {self.out_price[i][j]}")
+                print(f"Даты {self.out_date[i][j]}")
+                print(f"Питание {self.out_food[i][j]}")
+            print('\n')
 
 
 # Запуск WebDriverChrome
-class Execute(ReadExcel):
+class Execute(WriteExcel):
     def __init__(self):
         super().__init__()
         self.driver = None
@@ -339,150 +484,8 @@ class FindTours(Execute):
         return True
 
 
-# Запись в Excel результата парсинга
-class WriteExcel(LoadExcel, OutPut, IntPut):
-    def __init__(self):
-        super().__init__()
-        self.row = 2
-        self.count_hotel = 0
-        self.count_tur = 0
-        self.title_services = []
-        self.value_services = []
-        self.title_changed = False
-        self.first_tow()
-
-    def first_tow(self):
-        if not self.inp_rewriting:
-            self.row = self.sheet_out.Cells(1, 1).CurrentRegion.Rows.Count + 1
-
-    def write_excel(self):
-        """
-        НОМЕРА СТОЛБЦОВ В Data.xlsx
-        hotel_name = 1
-        city = 2
-        tour_operator = 3
-        beach_line = 4
-        distance_to_airport = 5
-        food = 6
-        hotel_rating = 7
-        count_stars = 8
-        date_start = 9
-        date_end = 10
-        night = 11
-        price = 12
-        services = 13
-        """
-        # Фармируем одномерный массив для записи в Data.xlsx
-        data = [self.out_hotel_name[-1],
-                self.out_city[-1],
-                self.out_tour_operator[-1][-1],
-                self.out_beach_line[-1],
-                self.out_distance_to_airport[-1],
-                self.out_food[-1][-1],
-                self.out_hotel_rating[-1],
-                self.out_count_stars[-1],
-                self.out_date[-1][-1][0],
-                self.out_date[-1][-1][1],
-                self.out_night[-1][-1],
-                self.out_price[-1][-1]
-                ]
-
-        try:
-
-            """ //////////////// Записывам услуги отеля /////////////////////////////////////////////////"""
-            """
-            Так как количесто и виды услуг у отелей разные то с 13 столбца название услуг формируются по предлогаемым услугам отелей
-            т.е. например первый отель garden ее услуги - (wifi, СПА, Басейн)
-            после столбца 12-Цена будут названии услуг 13-wifi, 14-СПА, 15-Басейн
-            у следующего отеля услги - (wifi, СПА, Басейн, места для курении) т.е. на одну услугу больше это (места для курении)
-            значит появится еще один столбец 16-места для курении
-            теперь это выглядит так 12-Цена, 13-wifi, 14-СПА, 15-Басейн, 16-места для курении
-            и в дальнейшем если у отеля будет услуга которой нету в названий услуг то она добавится в конец таблицы
-            если у отеля будет услуга wifi то она добавится в 13-wifi если басейн то 15-Басейн и т.д.
-            
-            title_services - массив названий услуг в Data.xlsx
-            value_services - массив с описаниями услуг в Data.xlsx
-            out_services[-1][0] - массив названий услуг текущего отеля
-            out_services[-1][1] - массив с описаниями услуг текущего отеля
-            """
-            # Указываем что массив с названии услуг не изменен
-            self.title_changed = False
-
-            # Если данные по услугам отсутствуют, то value_services пустой массив и услуги не записываем
-            if not self.out_services[-1]:
-                self.value_services = []
-            # Если данные по услугам есть
-            else:
-                # Если Метод записи "Продолжить"
-                if not self.inp_rewriting and len(self.title_services) == 0:
-                    self.title_services = self.inp_services
-
-                # Если массив названий услуг пустой
-                if len(self.title_services) == 0:
-                    self.title_services = self.out_services[-1][0]  # Заполняем массив название услуг
-                    self.title_changed = True  # Указываем массив названии услуг изменен
-                    for i in self.out_services[-1][1]:
-                        data.append(i)  # Добовляем в одномерный массив data для записи в Data.xlsx
-                # Если массив названий услуг не пустой
-                else:
-                    # Создаем пустой массив для описаний услуг текущего отеля. Размерность такая же как (title_services -  массив названий услуг в Data.xlsx)
-                    self.value_services = ['' for i in range(len(self.title_services))]
-
-                    # Проходим по массиву названий услуг текущего отеля
-                    for i in self.out_services[-1][0]:  # i - Название услуги текущего отеля
-                        out_index = self.out_services[-1][0].index(i)  # Индекс элемента названий услуг текущего отеля
-                        # Если в массиве названий услуг в Data.xlsx ЕСТЬ названий услуг текущего отеля
-                        if i in self.title_services:
-                            index_1 = self.title_services.index(i)  # Индекс элемента названий услуг Data.xlsx
-                            self.value_services[index_1] = self.out_services[-1][1][out_index]  # Описаниями услуг текущего отеля
-                        # Если в массиве названий услуг в Data.xlsx НЕТУ названий услуг текущего отеля
-                        else:
-                            # (Добавляем в массив названий услуг Data.xlsx) название услуги текущего отеля
-                            self.title_services.append(i)
-                            # (Добавляем в массив с описаниями услуг Data.xlsx) описаниями услуг текущего отеля
-                            self.value_services.append(self.out_services[-1][0][out_index])
-                            # Указываем массив названии услуг изменен
-                            self.title_changed = True
-
-                    for i in self.value_services:
-                        data.append(i)  # Добовляем в одномерный массив data, услуги текущего отеля для записи в Data.xlsx
-
-                # Если массив названии услуг изменен
-                if self.title_changed:
-                    # Обновляем названии услуг Data.xlsx
-                    self.sheet_out.Range(self.sheet_out.Cells(1, 13), self.sheet_out.Cells(1, 12 + len(self.title_services))).value = self.title_services
-            """//////////////////Конец формирование услуг/////////////////////////////////////////////////////////////////////////////////////"""
-
-            # Записываем в Data.xlsx данные о туре
-            self.sheet_out.Range(self.sheet_out.Cells(self.row, 1), self.sheet_out.Cells(self.row, len(data))).value = data
-            self.row += 1  # Номер строки в Data.xlsx где производится запись увеличиваем на + 1
-
-        except:
-            # Если в excel ячейка будет в режими редактирования то запись прервется и произайдет рекурсия, он будет пытаться записать сного и сного, пока
-            # не выйдети из режима редактирования ячейки
-            print(f"Не удалось записать данные в Excel: {self.file_name};\n"
-                  f"Причины:\n"
-                  f"1. Нужно выйти из режима редактрирования ячеек.\n"
-                  f"2. Файл {self.file_name} не найден.")
-            time.sleep(2)
-            return self.write_excel()  # Рекурсия
-
-    def printer(self):
-        for i in range(0, len(self.out_hotel_name)):
-            print(f"Отель {self.out_hotel_name[i]}")
-            print(f"Количество звезд {self.out_count_stars[i]}")
-            print(f"До аэропорта {self.out_distance_to_airport[i]}")
-            print(f"Пляжная линия {self.out_beach_line[i]}")
-            print(f"Сервисы {self.out_services[i]}")
-            for j in range(0, len(self.out_price[i])):
-                print(f"Цены {self.out_price[i][j]}")
-                print(f"Даты {self.out_date[i][j]}")
-                print(f"Питание {self.out_food[i][j]}")
-            print('\n')
-
-
 # Парсинг страницы
-class ParsingPage(WriteExcel, FindTours):
+class ParsingPage(FindTours):
     def __init__(self):
         super().__init__()
         self.continuation = True

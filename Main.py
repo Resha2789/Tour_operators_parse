@@ -18,7 +18,7 @@ class Web(ParsingPage):
         # Формируем url ссылку с входными параметрами
         if not self.find_tours():
             return
-        # Запускае цикл парсинга
+        # Запускаем цикл парсинга
         self.parsing_page()
         # Завершаем программу
         self.close()
